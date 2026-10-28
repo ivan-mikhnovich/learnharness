@@ -21,7 +21,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ModelCatalogEntry } from "@/src/core";
-import { fuzzyScore, subscriptionLabel } from "@/src/core";
+import { fuzzyScore, pickerModelRows, rowSearchTerms, subscriptionLabel, type ModelPickerRow } from "@/src/core";
 import { formatTokens } from "@/components/usage-format";
 import { SearchMenuList } from "./search-menu-list";
 
@@ -30,9 +30,43 @@ function priceLabel(cost: ModelCatalogEntry["cost"]): string {
 	return `${fmt(cost.input)}/${fmt(cost.output)}`;
 }
 
+/** One provider row's content. A row inside a model group leads with
+ *  "provider/id" — the exact pair a settings write stores, so the pick is
+ *  unambiguous; a lone model keeps the original name-first row. */
+function ModelRowBody({ entry, grouped }: { entry: ModelCatalogEntry; grouped: boolean }) {
+	const subscription = subscriptionLabel(`${entry.provider}:${entry.id}`);
+	return (
+		<>
+			<span className="flex items-center justify-between gap-2">
+				<span className={`truncate text-card-foreground${grouped ? " font-mono" : ""}`}>
+					{grouped ? `${entry.provider}/${entry.id}` : entry.name}
+				</span>
+				<span className="shrink-0 tabular-nums text-muted-foreground" title={subscription ? "Subscription connection" : "USD per 1M tokens in/out"}>
+					{subscription ?? priceLabel(entry.cost)}
+				</span>
+			</span>
+			<span className="flex items-center justify-between gap-2 text-muted-foreground">
+				<span className="truncate">
+					{grouped
+						? `${entry.name}${subscription ? " (subscription)" : ""}`
+						: `${subscription ? `${subscription} (subscription)` : entry.provider} · ${entry.id}`}
+				</span>
+				<span className="shrink-0 tabular-nums">{formatTokens(entry.contextWindow)}</span>
+			</span>
+		</>
+	);
+}
+
 /** The model dropdown body — fuzzy search + ranked list. `models ===
  *  undefined` is the catalog-loading state; an empty result list gets
- *  its own quiet line. */
+ *  its own quiet line.
+ *
+ *  PROVIDER-CHOICE WAVE (2026-10-29): the catalog lists one entry per
+ *  provider, so a model served by several providers used to appear as
+ *  unrelated rows and a gateway alias was easy to pick by accident. The
+ *  rows now flatten the model groups — a model's name is a non-selectable
+ *  header and its providers are the rows underneath, each reading
+ *  "provider/id". Single-provider models keep their old row. */
 export function ModelMenuList({
 	models,
 	effectiveId,
@@ -57,30 +91,32 @@ export function ModelMenuList({
 	return (
 		<>
 			<SearchMenuList
-				items={models}
-				itemKey={(m) => `${m.provider}/${m.id}`}
-				searchTerms={(m) => [m.provider, m.id, m.name]}
-				compare={(a, b) => a.id.localeCompare(b.id)}
-				isSelected={(m) => m.id === effectiveId && m.provider === (effectiveProvider ?? m.provider)}
-				onPick={onPick}
+				items={models === undefined ? undefined : pickerModelRows(models)}
+				itemKey={(row) => (row.kind === "header" ? `group:${row.group.key}` : `${row.entry.provider}/${row.entry.id}`)}
+				searchTerms={rowSearchTerms}
+				// Rows already arrive in model order; ties keep it.
+				compare={() => 0}
+				isHeader={(row) => row.kind === "header"}
+				headerTestid={(row) => (row.kind === "header" ? `model-group-${row.group.key.replace(/[^a-z0-9]+/gi, "_")}` : "")}
+				renderHeader={(row) =>
+					row.kind === "header" ? (
+						<span className="flex items-center justify-between gap-2">
+							<span className="truncate font-medium text-card-foreground">{row.group.title}</span>
+							<span className="shrink-0 tabular-nums">{row.group.members.length} providers</span>
+						</span>
+					) : null
+				}
+				isSelected={(row) => row.kind === "model" && row.entry.id === effectiveId && row.entry.provider === (effectiveProvider ?? row.entry.provider)}
+				onPick={(row) => {
+					if (row.kind === "model") onPick(row.entry);
+				}}
 				searchTestid="model-search"
 				listTestid="model-list"
-				optionTestid={(m) => `model-option-${m.id.replace(/[^a-z0-9-]/gi, "_")}`}
+				optionTestid={(row) => (row.kind === "model" ? `model-option-${row.entry.id.replace(/[^a-z0-9-]/gi, "_")}` : "")}
 				placeholder="Search models…"
 				loading="Loading models…"
 				empty="No models match."
-				renderItem={(m) => <>
-					<span className="flex items-center justify-between gap-2">
-						<span className="truncate text-card-foreground">{m.name}</span>
-						<span className="shrink-0 tabular-nums text-muted-foreground" title={subscriptionLabel(`${m.provider}:${m.id}`) ? "Subscription connection" : "USD per 1M tokens in/out"}>
-							{subscriptionLabel(`${m.provider}:${m.id}`) ?? priceLabel(m.cost)}
-						</span>
-					</span>
-					<span className="flex items-center justify-between gap-2 text-muted-foreground">
-						<span className="truncate">{subscriptionLabel(`${m.provider}:${m.id}`) ? `${subscriptionLabel(`${m.provider}:${m.id}`)} (subscription)` : m.provider} · {m.id}</span>
-						<span className="shrink-0 tabular-nums">{formatTokens(m.contextWindow)}</span>
-					</span>
-				</>}
+				renderItem={(row: ModelPickerRow) => (row.kind === "model" ? <ModelRowBody entry={row.entry} grouped={row.grouped} /> : null)}
 			/>
 			{footer && (
 				<div className="mt-1 border-t px-2 pt-1.5 text-xs text-muted-foreground">{footer}</div>

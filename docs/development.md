@@ -41,7 +41,7 @@ Secrets and machine-specific paths only. Model choice and thinking budgets are t
 
 | Variable | Purpose |
 |---|---|
-| `OPENROUTER_API_KEY` | required — all LLM calls go through OpenRouter |
+| `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, … | optional — BYOK model-provider keys. Every provider whose key is present federates into the model picker (`core/auth-keys.ts` lists them); no provider is required and no call is routed through a gateway you did not pick |
 | `GOOGLE_SEARCH_API_KEY` + `GOOGLE_CSE_ID` | researcher's `web_search` (Google Custom Search) |
 | `DEEPGRAM_API_KEY` | optional — dictation (STT token minting; audio streams browser→Deepgram, never through the server) |
 | `CHROME_PATH` | optional system Chrome fallback for demo verification; the app's own browser helper is primary (nothing is downloaded) |

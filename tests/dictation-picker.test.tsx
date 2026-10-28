@@ -260,8 +260,11 @@ test("the shared model menu preserves ranking, provider identity, keyboard clamp
 	const modelInput = document.querySelector<HTMLInputElement>('[data-testid="model-search"]')!;
 	const options = () => [...document.querySelectorAll<HTMLButtonElement>('[data-testid="model-list"] button')];
 	assert.equal(document.activeElement, modelInput);
-	assert.match(options()[0]!.textContent!, /p1 · alpha/);
-	assert.match(options()[1]!.textContent!, /p2 · alpha/);
+	// Provider-choice wave: a model served by several providers is a MODEL
+	// header with one "provider/id" row per provider.
+	assert.ok(byTest("model-group-model_alpha"), "the shared model is a group header");
+	assert.match(options()[0]!.textContent!, /p1\/alpha/);
+	assert.match(options()[1]!.textContent!, /p2\/alpha/);
 	assert.ok(!options()[0]!.className.includes("bg-muted/60"));
 	assert.ok(options()[1]!.className.includes("bg-muted/60"));
 	assert.match(options()[0]!.textContent!, /\$1\.00\/\$2\.00/);
