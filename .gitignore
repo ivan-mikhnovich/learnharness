@@ -11,6 +11,11 @@ SCOPE.md
 real-data-extraction/
 dist/
 
+# makepkg scratch and artifacts of the in-repo Arch package (packaging/arch)
+packaging/arch/src/
+packaging/arch/pkg/
+packaging/arch/*.pkg.tar.*
+
 # dev auth/keys store (auth-keys wave): repo-root auth.json — secrets never committed
 auth.json
 chatgpt-credentials.json*

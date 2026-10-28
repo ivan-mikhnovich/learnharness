@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=LearnHarness
+GenericName=Learning harness
+Comment=Adaptive teaching, practice and a persistent knowledge graph
+Exec=learnharness %U
+Icon=learnharness
+Terminal=false
+Categories=Education;
+Keywords=learning;study;teaching;tutor;knowledge;
+StartupWMClass=learnharness

@@ -26,6 +26,10 @@ node scripts/smoke-web-subscriptions.mjs # after build: offline Next start/dev +
 
 npm run desktop:dev    # next dev + Electron shell pointed at it
 npm run desktop:dist   # local signed/notarized macOS arm64 build (LH_NOTARY keychain)
+npm run build:linux    # unsigned Linux bundle: next build + server payload + electron-builder --linux dir
+
+# Arch Linux: build the CURRENT checkout into a pacman package (see packaging/arch/README.md)
+cd packaging/arch && makepkg -f
 
 # one-shot data scripts (run from the master tree only — data never crosses trees)
 npx tsx --env-file=.env.local scripts/import-notes.ts <dir>   # bulk-import notes → graph

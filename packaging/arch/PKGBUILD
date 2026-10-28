@@ -1,0 +1,107 @@
+# Maintainer: Ivan Mikhnovich <ivan.mikhnovich@gmail.com>
+#
+# learnharness-git — builds the CURRENT checkout. Run makepkg from this
+# directory: the sources are the working tree two levels up, so local
+# branches and uncommitted work are exactly what gets packaged.
+#
+# The build mirrors the release CI's Linux job: next build (standalone
+# output) -> scripts/build-server.mjs -> electron-builder --linux dir.
+# The packager owns the installed files: package() drops the
+# package-managed-updates marker beside app.asar, and the Electron shell
+# then never runs electron-updater (an update would bypass this package
+# and ask for root from a running GUI).
+
+pkgname=learnharness-git
+pkgver=0.3.9 # replaced by pkgver()
+pkgrel=1
+pkgdesc="Agent harness for learning: adaptive teaching, practice, knowledge graph"
+arch=('x86_64')
+url="https://github.com/amosblomqvist/learnharness"
+license=('AGPL-3.0-only')
+depends=(
+	'alsa-lib'
+	'at-spi2-core'
+	'cairo'
+	'dbus'
+	'expat'
+	'glib2'
+	'gtk3'
+	'hicolor-icon-theme'
+	'libcups'
+	'libnotify'
+	'libpulse'
+	'libsecret'
+	'libx11'
+	'libxcb'
+	'libxcomposite'
+	'libxdamage'
+	'libxext'
+	'libxfixes'
+	'libxkbcommon'
+	'libxrandr'
+	'libxrender'
+	'libxss'
+	'libxtst'
+	'mesa'
+	'nspr'
+	'nss'
+	'pango'
+	'systemd-libs'
+	'xdg-utils'
+)
+makedepends=('nodejs' 'npm')
+provides=('learnharness')
+conflicts=('learnharness' 'learnharness-bin')
+optdepends=('python: helper scripts in the bundled learnharness skill')
+options=('!strip' '!debug')
+# No fetched sources: build() consumes the checkout this PKGBUILD lives in.
+source=()
+sha256sums=()
+
+_repo="$(realpath -m "$startdir/../..")"
+
+pkgver() {
+	cd "$_repo"
+	printf '%s.r%s.g%s' \
+		"$(node -p "require('./package.json').version")" \
+		"$(git rev-list --count HEAD)" \
+		"$(git rev-parse --short HEAD)"
+}
+
+build() {
+	cd "$_repo"
+	# Turbopack scans the project root and aborts on an unreadable directory;
+	# makepkg creates its pkg/ scratch with mode 0111. It is empty while
+	# build() runs — readable is all the scan needs.
+	chmod 0755 "$startdir/pkg"
+	NEXT_TELEMETRY_DISABLED=1 npm ci --no-audit --no-fund
+	NEXT_TELEMETRY_DISABLED=1 npm run build:linux
+}
+
+package() {
+	cd "$_repo"
+	local dest="$pkgdir/opt/LearnHarness"
+
+	if [[ ! -x dist/linux-unpacked/learnharness ]]; then
+		error "dist/linux-unpacked/learnharness is missing — build() did not run"
+	fi
+
+	install -d "$dest"
+	cp -a dist/linux-unpacked/. "$dest/"
+
+	# Arch enables unprivileged user namespaces, so Chromium's namespace
+	# sandbox works without a setuid helper.
+	chmod 0755 "$dest/chrome-sandbox"
+
+	# pacman owns these files: the shell must never run electron-updater.
+	install -Dm644 /dev/null "$dest/resources/package-managed-updates"
+
+	install -d "$pkgdir/usr/bin"
+	ln -s /opt/LearnHarness/learnharness "$pkgdir/usr/bin/learnharness"
+
+	install -Dm644 "$startdir/learnharness.desktop" \
+		"$pkgdir/usr/share/applications/learnharness.desktop"
+	install -Dm644 build/icon.png \
+		"$pkgdir/usr/share/icons/hicolor/512x512/apps/learnharness.png"
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

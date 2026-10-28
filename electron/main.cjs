@@ -438,6 +438,21 @@ const ZOOM_LADDER = [0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
  * inside the .app bundle Squirrel is about to replace (extraResources),
  * and before-quit alone would race the swap. */
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/** Distribution-owned updates (Arch package, 2026-10-28): when the system
+ *  package manager owns the installed tree, the in-app updater must never
+ *  download or install anything — it would bypass the package version and
+ *  ask for root from a running GUI. The marker ships beside app.asar and is
+ *  written by the distribution's package() step; an absent marker keeps the
+ *  upstream behavior byte-for-byte. */
+function packageManagedUpdates() {
+	try {
+		return fs.existsSync(path.join(process.resourcesPath, "package-managed-updates"));
+	} catch {
+		return false;
+	}
+}
+
 let autoUpdater = null; // electron-updater's, packaged builds only
 // Observational only: this snapshot NEVER gates a check, download or install.
 // The revision lets late subscribers reject an older in-flight IPC snapshot.
@@ -506,6 +521,11 @@ function installUpdateNow() {
 function setupAutoUpdater() {
 	if (!app.isPackaged) {
 		log("auto-update: dev build — updater disabled");
+		reportUpdateStatus("disabled");
+		return;
+	}
+	if (packageManagedUpdates()) {
+		log("auto-update: managed by the system package manager — updater disabled");
 		reportUpdateStatus("disabled");
 		return;
 	}
@@ -587,8 +607,12 @@ function installMenu() {
 			label: app.name,
 			submenu: [
 				{ role: "about" },
-				// Manual checks report their result in Settings → General.
-				{ label: "Check for Updates…", click: () => checkForUpdatesFromMenu() },
+				// Manual checks report their result in Settings → General. A
+				// package-managed install has no updater to check: the row
+				// states who owns updates instead of offering a dead action.
+				packageManagedUpdates()
+					? { label: "Updates are managed by pacman", enabled: false }
+					: { label: "Check for Updates…", click: () => checkForUpdatesFromMenu() },
 				{ type: "separator" },
 				{ role: "hide" },
 				{ role: "hideOthers" },
