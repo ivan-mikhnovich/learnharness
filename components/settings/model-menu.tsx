@@ -21,7 +21,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ModelCatalogEntry } from "@/src/core";
-import { CLAUDE_CODE_PROVIDER, CUSTOM_PROVIDER, fuzzyScore, subscriptionLabel } from "@/src/core";
+import { CLAUDE_CODE_PROVIDER, CUSTOM_PROVIDER, fuzzyScore, pickerModelRows, rowSearchTerms, subscriptionLabel, type ModelPickerRow } from "@/src/core";
 import { formatTokens } from "@/components/usage-format";
 import { SearchMenuList } from "./search-menu-list";
 
@@ -29,6 +29,46 @@ function priceLabel(cost: ModelCatalogEntry["cost"]): string {
 	if (!cost) return "Unpriced";
 	const fmt = (n: number) => `$${n < 1 ? n.toFixed(2).replace(/0$/, "") : n.toFixed(2)}`;
 	return `${fmt(cost.input)}/${fmt(cost.output)}`;
+}
+
+/** One provider row's content. A row inside a model group leads with
+ *  "provider/id" — the exact pair a settings write stores, so the pick is
+ *  unambiguous; a lone model keeps the name-first row. Billing follows the
+ *  host catalog: a subscription label, Claude Code's CLI billing, a real
+ *  price, or "Unpriced" when the connection reports no cost. */
+function ModelRowBody({ entry, grouped }: { entry: ModelCatalogEntry; grouped: boolean }) {
+	const subscription = subscriptionLabel(`${entry.provider}:${entry.id}`);
+	const claude = entry.provider === CLAUDE_CODE_PROVIDER;
+	const billed = claude ? "CLI billing" : (subscription ?? priceLabel(entry.cost));
+	const billedTitle = claude
+		? "Billing is determined by your Claude Code configuration; LearnHarness does not estimate it."
+		: subscription
+			? "Subscription connection"
+			: entry.cost
+				? "USD per 1M tokens in/out"
+				: "Price unavailable";
+	return (
+		<>
+			<span className="flex items-center justify-between gap-2">
+				<span className={`truncate text-card-foreground${grouped ? " font-mono" : ""}`}>
+					{grouped ? `${entry.provider}/${entry.id}` : entry.name}
+				</span>
+				<span className="shrink-0 tabular-nums text-muted-foreground" title={billedTitle}>
+					{billed}
+				</span>
+			</span>
+			<span className="flex items-center justify-between gap-2 text-muted-foreground">
+				<span className="truncate">
+					{grouped
+						? `${entry.name}${subscription ? " (subscription)" : ""}`
+						: `${subscription ? `${subscription} (subscription)` : entry.provider} · ${entry.id}`}
+				</span>
+				<span className="shrink-0 tabular-nums">
+					{entry.contextWindow === null ? "—" : formatTokens(entry.contextWindow)}
+				</span>
+			</span>
+		</>
+	);
 }
 
 /** The model dropdown body — fuzzy search + ranked list. `models ===
@@ -57,43 +97,49 @@ export function ModelMenuList({
 	footer?: string;
 	/** Vision slot: only image-capable models are selectable — plus every
 	 *  custom-endpoint model, whose capability the endpoint may not report.
-	 *  Image-capable ones float to the top. */
+	 *  Image-capable models float to the top; their whole group travels
+	 *  with them so a header never separates from its provider rows. */
 	vision?: boolean;
 }) {
 	// Vision slot: built-ins must report image input; custom-endpoint models
-	// stay selectable (the endpoint may not report a modality). Image-capable
-	// ones float to the top of the list.
+	// stay selectable (the endpoint may not report a modality). Filtering
+	// happens BEFORE grouping; the image-capable priority orders whole
+	// groups, not rows.
 	const visionItems = vision
 		? models?.filter((m) => m.input.includes("image") || m.provider === CUSTOM_PROVIDER.id)
 		: models;
+	const rows = visionItems === undefined
+		? undefined
+		: pickerModelRows(visionItems, vision ? (m) => m.input.includes("image") : undefined);
 	return (
 		<>
 			<SearchMenuList
-				items={visionItems}
-				itemKey={(m) => `${m.provider}/${m.id}`}
-				searchTerms={(m) => [m.provider, m.id, m.name]}
-				compare={(a, b) => a.id.localeCompare(b.id)}
-				prioritize={vision ? (m) => m.input.includes("image") : undefined}
-				isSelected={(m) => m.id === effectiveId && m.provider === (effectiveProvider ?? m.provider)}
-				onPick={onPick}
+				items={rows}
+				itemKey={(row) => (row.kind === "header" ? `group:${row.group.key}` : `${row.entry.provider}/${row.entry.id}`)}
+				searchTerms={rowSearchTerms}
+				// Rows arrive in model order (groups already prioritized); ties keep it.
+				compare={() => 0}
+				isHeader={(row) => row.kind === "header"}
+				headerTestid={(row) => (row.kind === "header" ? `model-group-${row.group.key.replace(/[^a-z0-9]+/gi, "_")}` : "")}
+				renderHeader={(row) =>
+					row.kind === "header" ? (
+						<span className="flex items-center justify-between gap-2">
+							<span className="truncate font-medium text-card-foreground">{row.group.title}</span>
+							<span className="shrink-0 tabular-nums">{row.group.members.length} providers</span>
+						</span>
+					) : null
+				}
+				isSelected={(row) => row.kind === "model" && row.entry.id === effectiveId && row.entry.provider === (effectiveProvider ?? row.entry.provider)}
+				onPick={(row) => {
+					if (row.kind === "model") onPick(row.entry);
+				}}
 				searchTestid="model-search"
 				listTestid="model-list"
-				optionTestid={(m) => `model-option-${m.id.replace(/[^a-z0-9-]/gi, "_")}`}
+				optionTestid={(row) => (row.kind === "model" ? `model-option-${row.entry.id.replace(/[^a-z0-9-]/gi, "_")}` : "")}
 				placeholder="Search models…"
 				loading="Loading models…"
 				empty="No models match."
-				renderItem={(m) => <>
-					<span className="flex items-center justify-between gap-2">
-						<span className="truncate text-card-foreground">{m.name}</span>
-						<span className="shrink-0 tabular-nums text-muted-foreground" title={m.provider === CLAUDE_CODE_PROVIDER ? "Billing is determined by your Claude Code configuration; LearnHarness does not estimate it." : subscriptionLabel(`${m.provider}:${m.id}`) ? "Subscription connection" : m.cost ? "USD per 1M tokens in/out" : "Price unavailable"}>
-							{m.provider === CLAUDE_CODE_PROVIDER ? "CLI billing" : subscriptionLabel(`${m.provider}:${m.id}`) ?? priceLabel(m.cost)}
-						</span>
-					</span>
-					<span className="flex items-center justify-between gap-2 text-muted-foreground">
-						<span className="truncate">{subscriptionLabel(`${m.provider}:${m.id}`) ? `${subscriptionLabel(`${m.provider}:${m.id}`)} (subscription)` : m.provider} · {m.id}</span>
-						<span className="shrink-0 tabular-nums">{m.contextWindow === null ? "—" : formatTokens(m.contextWindow)}</span>
-					</span>
-				</>}
+				renderItem={(row: ModelPickerRow) => (row.kind === "model" ? <ModelRowBody entry={row.entry} grouped={row.grouped} /> : null)}
 			/>
 			{footer && (
 				<div className="mt-1 border-t px-2 pt-1.5 text-xs text-muted-foreground">{footer}</div>
