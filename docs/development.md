@@ -11,6 +11,7 @@ npm ci
 npm run plugins:setup  # generate local SDKs and install locked source-plugin dependencies
 npm run dev            # normally http://localhost:3000
 npm run desktop:dev    # Next dev + Electron on localhost:3000
+npm run build:linux    # unsigned Linux bundle: plugin staging + server payload + electron-builder --linux dir
 ```
 
 `plugins:setup` prepares each source package under `plugins/`: it generates its ignored `.sdk/` when needed, then runs `npm ci`. Run it after a fresh checkout and again after public API or plugin lockfile changes. Root typecheck/build includes plugin sources, so CI uses the same preparation. It does not build plugin bundles, install/enable plugins in your learning-data directory, or populate `core-plugins/`.
@@ -29,6 +30,8 @@ No key is needed to open the UI. Configure connections and the Strong/Cheap/Visi
 npm run build          # stage core plugins, then Next production/standalone build
 npm start              # serve the production build with Next
 ```
+
+Arch Linux: `packaging/arch/PKGBUILD` builds the current checkout into a pacman package (`learnharness-git`) with `cd packaging/arch && makepkg -f`; see [packaging/arch/README.md](../packaging/arch/README.md).
 
 `npm run desktop:dist` is the local **signed macOS** packaging path, not a portable unsigned shortcut. Prerequisites and Windows/Linux instructions are in [Desktop builds and releases](desktop-release.md).
 

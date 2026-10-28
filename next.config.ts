@@ -52,6 +52,11 @@ const nextConfig: NextConfig = {
 	outputFileTracingExcludes: {
 		"*": [
 			"**/data/**/*",
+			// The in-repo Arch packaging (PKGBUILD, docs, and the built
+			// .pkg.tar.zst) is build tooling, never a server dependency —
+			// the tracer otherwise sweeps the whole directory, package
+			// artifact included, into the standalone payload.
+			"**/packaging/**/*",
 			"auth.json",
 			"chatgpt-credentials.json*",
 			"github-copilot-credentials.json*",
